@@ -56,7 +56,7 @@ We encourage you to report issues and contribute changes
 
 ## License
 
-Deepin Camera is licensed under [GPLv3](LICENSE) with [OpenSSL exception](https://lists.debian.org/debian-legal/2004/05/msg00595.html).
+deepin-camera is licensed under [GPL-3.0-or-later](LICENSE).
 
 
 

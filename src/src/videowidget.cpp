@@ -1,23 +1,7 @@
-/*
-* Copyright (C) 2020 ~ 2021 Uniontech Software Technology Co.,Ltd.
-*
-* Author:     shicetu <shicetu@uniontech.com>
-*             hujianbo <hujianbo@uniontech.com>
-* Maintainer: shicetu <shicetu@uniontech.com>
-*             hujianbo <hujianbo@uniontech.com>
-* This program is free software: you can redistribute it and/or modify
-* it under the terms of the GNU General Public License as published by
-* the Free Software Foundation, either version 3 of the License, or
-* any later version.
-*
-* This program is distributed in the hope that it will be useful,
-* but WITHOUT ANY WARRANTY; without even the implied warranty of
-* MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-* GNU General Public License for more details.
-*
-* You should have received a copy of the GNU General Public License
-* along with this program.  If not, see <http://www.gnu.org/licenses/>.
-*/
+// Copyright (C) 2020 ~ 2021 Uniontech Software Technology Co.,Ltd.
+// SPDX-FileCopyrightText: 2023 UnionTech Software Technology Co., Ltd.
+//
+// SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "videowidget.h"
 #include "mainwindow.h"
@@ -28,6 +12,7 @@
 #include "camera.h"
 #include "eventlogutils.h"
 #include "config.h"
+#include "globalutils.h"
 
 #include <DBlurEffectWidget>
 
@@ -219,8 +204,8 @@ videowidget::videowidget(DWidget *parent)
     connect(m_recordingTimer, SIGNAL(timeout()), this, SLOT(showRecTime()));//显示录制时长
     m_flashTimer->setSingleShot(true);
 
-    //设置相机背景色为黑色
-    QColor bgColor(0, 0, 0);
+    //设置相机背景色为灰色
+    QColor bgColor(25, 25, 25);
     QPalette pal(this->palette());
     pal.setColor(QPalette::Background, bgColor);
     this->setAutoFillBackground(true);
@@ -230,9 +215,15 @@ videowidget::videowidget(DWidget *parent)
     // 默认不显示网格线
     setGridType(Grid_None);
 
-    if (dc::Settings::get().getOption("outsetting.outformat.vidformat").toInt() ||
-            DataManager::instance()->encodeEnv() != FFmpeg_Env)
+    if (DataManager::instance()->encodeEnv() != FFmpeg_Env || !DataManager::instance()->encExists() || GlobalUtils::isLowPerformanceBoard()) {
         m_videoFormat = "webm";
+    }
+    if (dc::Settings::get().getOption("outsetting.outformat.vidformat").toInt()) {
+        if (!GlobalUtils::isLowPerformanceBoard())
+            m_videoFormat = "webm";
+        else
+            m_videoFormat = "mp4";
+    }
 }
 
 //延迟加载
@@ -246,8 +237,6 @@ void videowidget::delayInit()
     setFlash(dc::Settings::get().getOption("photosetting.Flashlight.Flashlight").toBool());
     setCapStatus(false);
     m_imgPrcThread->m_bTake = false;
-    connect(m_imgPrcThread, SIGNAL(SendMajorImageProcessing(QImage *, int)),
-            this, SLOT(ReceiveMajorImage(QImage *, int)));
     if (get_wayland_status() == true) {
         connect(m_imgPrcThread, SIGNAL(SendMajorImageProcessing(QImage *, int)),
                 this, SLOT(ReceiveMajorImage(QImage *, int)));
@@ -443,6 +432,7 @@ void videowidget::ReceiveOpenGLstatus(bool result)
             m_openglwidget->show();
 
         malloc_trim(0);
+        emit camAvailable();
     }
 }
 
@@ -450,6 +440,13 @@ void videowidget::ReceiveOpenGLstatus(bool result)
 
 void videowidget::ReceiveMajorImage(QImage *image, int result)
 {
+    // 若窗口高度改变，需要刷新整个窗口，防止上一帧图像出现在其它区域
+    static int height = this->height();
+    if (height != this->height()) {
+        update();
+        height = this->height();
+    }
+
     if (!image->isNull()) {
         switch (result) {
         case 0:     //Success
@@ -469,9 +466,8 @@ void videowidget::ReceiveMajorImage(QImage *image, int result)
             if (m_openglwidget && m_openglwidget->isVisible())
                 m_openglwidget->hide();
             {
-                // OpenGL窗口等比例缩放画面
-                int widgetwidth = width();
-                int widgetheight = height();
+                int widgetwidth = this->width();
+                int widgetheight = this->height();
                 if ((image->width() * 100 / image->height()) > (widgetwidth * 100 / widgetheight)) {
                     QImage img = image->scaled(widgetwidth, widgetwidth * image->height() / image->width(), Qt::IgnoreAspectRatio, Qt::SmoothTransformation);
                     m_framePixmap = QPixmap::fromImage(img);
@@ -498,6 +494,7 @@ void videowidget::ReceiveMajorImage(QImage *image, int result)
         default:
             break;
         }
+        emit camAvailable();
     }
 }
 

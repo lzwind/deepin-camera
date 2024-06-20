@@ -1,24 +1,7 @@
-/*
-* Copyright (C) 2020 ~ 2021 Uniontech Software Technology Co.,Ltd.
-*
-* Author:     shicetu <shicetu@uniontech.com>
-*             hujianbo <hujianbo@uniontech.com>
-*             zhangcheng <zhangchenga@uniontech.com>
-* Maintainer: shicetu <shicetu@uniontech.com>
-*             hujianbo <hujianbo@uniontech.com>
-* This program is free software: you can redistribute it and/or modify
-* it under the terms of the GNU General Public License as published by
-* the Free Software Foundation, either version 3 of the License, or
-* any later version.
-*
-* This program is distributed in the hope that it will be useful,
-* but WITHOUT ANY WARRANTY; without even the implied warranty of
-* MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-* GNU General Public License for more details.
-*
-* You should have received a copy of the GNU General Public License
-* along with this program.  If not, see <http://www.gnu.org/licenses/>.
-*/
+// Copyright (C) 2020 ~ 2021 Uniontech Software Technology Co.,Ltd.
+// SPDX-FileCopyrightText: 2023 UnionTech Software Technology Co., Ltd.
+//
+// SPDX-License-Identifier: GPL-3.0-or-later
 
 #ifndef DATAMANAGER_H
 #define DATAMANAGER_H
@@ -157,6 +140,9 @@ public:
      */
     EncodeEnv encodeEnv();
 
+    void setEncExists(bool status);
+    bool encExists();
+
 private:
     DataManager();
     static DataManager *m_dataManager;
@@ -165,5 +151,6 @@ private:
     int m_videoCount;
     EncodeEnv m_encodeEnv;
     volatile enum DeviceStatus m_devStatus;
+    bool m_H264EncoderExists;
 };
 #endif // DATAMANAGER_H

@@ -1,23 +1,7 @@
-/*
-* Copyright (C) 2020 ~ 2021 Uniontech Software Technology Co.,Ltd.
-*
-* Author:     shicetu <shicetu@uniontech.com>
-*             hujianbo <hujianbo@uniontech.com>
-* Maintainer: shicetu <shicetu@uniontech.com>
-*             hujianbo <hujianbo@uniontech.com>
-* This program is free software: you can redistribute it and/or modify
-* it under the terms of the GNU General Public License as published by
-* the Free Software Foundation, either version 3 of the License, or
-* any later version.
-*
-* This program is distributed in the hope that it will be useful,
-* but WITHOUT ANY WARRANTY; without even the implied warranty of
-* MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-* GNU General Public License for more details.
-*
-* You should have received a copy of the GNU General Public License
-* along with this program.  If not, see <http://www.gnu.org/licenses/>.
-*/
+// Copyright (C) 2020 ~ 2021 Uniontech Software Technology Co.,Ltd.
+// SPDX-FileCopyrightText: 2023 UnionTech Software Technology Co., Ltd.
+//
+// SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "mainwindow.h"
 #include "capplication.h"
@@ -33,6 +17,7 @@
 #include "camera.h"
 #include "eventlogutils.h"
 #include "config.h"
+#include "globalutils.h"
 
 #include <DLabel>
 #include <DApplication>
@@ -784,6 +769,9 @@ CMainWindow::CMainWindow(QWidget *parent)
     titlebar()->deleteLater();
     setupTitlebar();
     m_pTitlebar->raise();
+
+    //修复在性能较差的电脑上启动闪烁白框
+    initUI();
 }
 
 void CMainWindow::slotPopupSettingsDialog()
@@ -1227,8 +1215,6 @@ void CMainWindow::loadAfterShow()
 {
     encodeenv = DataManager::instance()->encodeEnv();
     initDynamicLibPath();
-    //该方法导致键盘可用性降低，调试时无法使用、触摸屏无法唤起多次右键菜单，改用备用方案
-    initUI();
     initShortcut();
     gviewencoder_init();
     v4l2core_init();
@@ -1265,7 +1251,7 @@ void CMainWindow::loadAfterShow()
     m_filterName->setText(filterPreviewButton::filterName(filter_Normal));
 
     showChildWidget();
-    m_windowStateThread = new windowStateThread(this);
+    m_windowStateThread = new windowStateThread(m_bWayland, this);
     connect(m_windowStateThread, &windowStateThread::someWindowFullScreen, this, &CMainWindow::onStopPhotoAndRecord);
 
     QJsonObject obj{
@@ -1305,6 +1291,8 @@ void CMainWindow::updateBlockSystem(bool bTrue)
 
 void CMainWindow::onNoCam()
 {
+    m_pTitlebar->titlebar()->setBackgroundTransparent(false);
+    m_pTitlebar->slotThemeTypeChanged();
     showChildWidget();
     onEnableSettings(true);
 }
@@ -1405,27 +1393,30 @@ void CMainWindow::onTimeoutLock(const QString &serviceName, QVariantMap key2valu
 {
     qDebug() << serviceName << key2value << endl;
     //仅wayland需要锁屏结束录制并停止使用摄像头，从锁屏恢复重新开启摄像头
-    if (m_bWayland) {
+    //wayland下只需要停止录像，不需要停止线程，需要在锁屏状态下继续处理摄像头状态
+//    if (m_bWayland) {
 
+//        if (key2value.value("Locked").value<bool>()) {
+//            qDebug() << "locked";
+
+//            onStopPhotoAndRecord();
+
+//            m_videoPre->m_imgPrcThread->stop();
+
+//            v4l2_dev_t *vd =  get_v4l2_device_handler();
+//            qDebug() << "lock end";
+//        } else {
+//            qDebug() << "restart use camera cause ScreenBlack or PoweerLock";
+//            //打开摄像头
+//            m_videoPre->onChangeDev();
+//            qDebug() << "v4l2core_start_stream OK";
+//        }
+
+//    } else { //锁屏结束连拍
         if (key2value.value("Locked").value<bool>()) {
-            qDebug() << "locked";
-
-            onStopPhotoAndRecord();
-
-            m_videoPre->m_imgPrcThread->stop();
-            qDebug() << "lock end";
-        } else {
-            qDebug() << "restart use camera cause ScreenBlack or PoweerLock";
-            //打开摄像头
-            m_videoPre->onChangeDev();
-            qDebug() << "v4l2core_start_stream OK";
-        }
-
-    } else { //锁屏结束连拍
-        if (key2value.value("Locked").value<bool>()) {
             onStopPhotoAndRecord();
         }
-    }
+//    }
 }
 
 void CMainWindow::onTrashFile(const QString &fileName)
@@ -1490,7 +1481,7 @@ void CMainWindow::onPhotoRecordBtnClked()
             int nContinuous = Settings::get().getOption("photosetting.photosnumber.takephotos").toInt();
             if (nContinuous > 1) {
                 // 仅在连拍模式下才开启窗口状态监听线程
-                if (!m_windowStateThread->isRunning()) {
+                if (!m_windowStateThread->isRunning() && !m_bWayland) {
                     m_windowStateThread->start();
                 }
             }
@@ -1505,7 +1496,7 @@ void CMainWindow::onPhotoRecordBtnClked()
                 return;
 
             m_videoPre->onTakeVideo();
-            if (!m_windowStateThread->isRunning()) {
+            if (!m_windowStateThread->isRunning() && !m_bWayland) {
                 m_windowStateThread->start();
             }
         }
@@ -1527,7 +1518,7 @@ void CMainWindow::onUpdateRecordState(int state)
     m_actionSettings->setEnabled(!m_bRecording);
     showChildWidget();
     if (false == m_bRecording
-            && m_windowStateThread->isRunning()) {
+            && m_windowStateThread->isRunning() && !m_bWayland) {
         m_windowStateThread->requestInterruption();
     }
 }
@@ -1538,7 +1529,7 @@ void CMainWindow::onUpdatePhotoState(int state)
     m_photoState = state;
     showChildWidget();
     if (photoNormal == state
-            && m_windowStateThread->isRunning()) {
+            && m_windowStateThread->isRunning() && !m_bWayland) {
         m_windowStateThread->requestInterruption();
     }
 }
@@ -1874,6 +1865,9 @@ void CMainWindow::initConnection()
     connect(m_videoPre, SIGNAL(noCam()), this, SLOT(onNoCam()));
     //相机被抢占了，结束拍照、录制
     connect(m_videoPre, SIGNAL(noCamAvailable()), this, SLOT(onNoCam()));
+    connect(m_videoPre, &videowidget::camAvailable, this, [=](){
+        m_pTitlebar->titlebar()->setBackgroundTransparent(true);
+    });
     //设置新的分辨率
     connect(m_videoPre, SIGNAL(sigDeviceChange()), &Settings::get(), SLOT(setNewResolutionList()));
 
@@ -1896,9 +1890,15 @@ void CMainWindow::initConnection()
 
     //控制中心更改了本地时间，及时更新当前时间
     //避免时间往前切换过后，需要点击两次才能结束录制
+#ifdef OS_BUILD_V23
+    QDBusConnection::sessionBus().connect("org.deepin.daemon.Timedate1", "/org/deepin/daemon/Timedate1",
+                                          "org.deepin.daemon.Timedate1", "TimeUpdate", this,
+                                          SLOT(onLocalTimeChanged()));
+#else
     QDBusConnection::sessionBus().connect("com.deepin.daemon.Timedate", "/com/deepin/daemon/Timedate",
                                           "com.deepin.daemon.Timedate", "TimeUpdate", this,
                                           SLOT(onLocalTimeChanged()));
+#endif
 
     QDBusConnection::systemBus().connect("org.freedesktop.login1", "/org/freedesktop/login1",
                                          "org.freedesktop.login1.Manager", "PrepareForSleep", this, SLOT(stopCancelContinuousRecording(bool)));
@@ -2281,7 +2281,7 @@ bool CMainWindow::eventFilter(QObject *obj, QEvent *e)
         DataManager::instance()->m_tabIndex = 9;
     } else if (e->type() == QEvent::MouseButtonPress) {
         DataManager::instance()->m_tabIndex = 0;
-        m_videoPre->setFocus();
+        m_pTitlebar->setFocus();
     } else {
         QWidget::eventFilter(obj, e);//调用父类事件过滤器
     }

@@ -1,29 +1,14 @@
-/*
-* Copyright (C) 2020 ~ 2021 Uniontech Software Technology Co.,Ltd.
-*
-* Author:     shicetu <shicetu@uniontech.com>
-*             hujianbo <hujianbo@uniontech.com>
-* Maintainer: shicetu <shicetu@uniontech.com>
-*             hujianbo <hujianbo@uniontech.com>
-* This program is free software: you can redistribute it and/or modify
-* it under the terms of the GNU General Public License as published by
-* the Free Software Foundation, either version 3 of the License, or
-* any later version.
-*
-* This program is distributed in the hope that it will be useful,
-* but WITHOUT ANY WARRANTY; without even the implied warranty of
-* MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-* GNU General Public License for more details.
-*
-* You should have received a copy of the GNU General Public License
-* along with this program.  If not, see <http://www.gnu.org/licenses/>.
-*/
+// Copyright (C) 2020 ~ 2021 Uniontech Software Technology Co.,Ltd.
+// SPDX-FileCopyrightText: 2023 UnionTech Software Technology Co., Ltd.
+//
+// SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "Settings.h"
 #include "camview.h"
 #include "gviewv4l2core.h"
 #include "capplication.h"
 #include "camera.h"
+#include "globalutils.h"
 
 #include <QtCore>
 #include <QtGui>
@@ -63,10 +48,20 @@ void Settings::init()
 
     QStringList videoFormatList;
     if (DataManager::instance()->encodeEnv() == FFmpeg_Env) {
-        videoFormatList << tr("mp4")
-                        << tr("webm");
+        if (DataManager::instance()->encExists()) {
+            GlobalUtils::loadCameraConf();
+            if (!GlobalUtils::isLowPerformanceBoard()) {
+                videoFormatList << tr("mp4") << tr("webm");
+            } else {
+                videoFormatList << tr("webm") << tr("mp4");
+            }
+
+        } else {
+            videoFormatList << tr("webm");
+            m_settings->setOption("outsetting.outformat.vidformat", 0);
+        }
     } else {
-        videoFormatList << tr("webm");
+        videoFormatList << "webm";
         m_settings->setOption("outsetting.outformat.vidformat", 0);
     }
     m_settings->option("outsetting.outformat.vidformat")->setData("items", videoFormatList);

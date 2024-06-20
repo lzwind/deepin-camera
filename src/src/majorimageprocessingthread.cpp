@@ -1,23 +1,7 @@
-/*
-* Copyright (C) 2020 ~ 2021 Uniontech Software Technology Co.,Ltd.
-*
-* Author:     shicetu <shicetu@uniontech.com>
-*             hujianbo <hujianbo@uniontech.com>
-* Maintainer: shicetu <shicetu@uniontech.com>
-*             hujianbo <hujianbo@uniontech.com>
-* This program is free software: you can redistribute it and/or modify
-* it under the terms of the GNU General Public License as published by
-* the Free Software Foundation, either version 3 of the License, or
-* any later version.
-*
-* This program is distributed in the hope that it will be useful,
-* but WITHOUT ANY WARRANTY; without even the implied warranty of
-* MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-* GNU General Public License for more details.
-*
-* You should have received a copy of the GNU General Public License
-* along with this program.  If not, see <http://www.gnu.org/licenses/>.
-*/
+// Copyright (C) 2020 ~ 2021 Uniontech Software Technology Co.,Ltd.
+// SPDX-FileCopyrightText: 2023 UnionTech Software Technology Co., Ltd.
+//
+// SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "majorimageprocessingthread.h"
 #include "datamanager.h"
@@ -30,6 +14,8 @@ extern "C" {
 #include <QFile>
 #include <QDate>
 #include <QDir>
+#include <DSysInfo>
+DCORE_USE_NAMESPACE
 
 MajorImageProcessingThread::MajorImageProcessingThread():m_bHorizontalMirror(false)
 {
@@ -263,9 +249,12 @@ void MajorImageProcessingThread::run()
 
             // 判断是否使用rgb数据
             bool bUseRgb = false;
-    #ifdef __mips__
+#if defined(_loongarch) || defined(__loongarch__) || defined(__loongarch64) || defined (__mips__)
             bUseRgb = true;
-    #endif
+#endif
+            if(DSysInfo::majorVersion() == "23") {
+                bUseRgb = true;
+            }
             if (get_wayland_status())
                 bUseRgb = true;
 
@@ -411,10 +400,7 @@ void MajorImageProcessingThread::run()
                     uint8_t *rgbPtr = nullptr;
                     uint nVdWidth = static_cast<unsigned int>(m_frame->width);
                     uint nVdHeight = static_cast<unsigned int>(m_frame->height);
-                    if (rgbPtr != nullptr) {
-                        free(rgbPtr);
-                        rgbPtr = nullptr;
-                    }
+
 
                     rgbsize = nVdWidth * nVdHeight * 3;
                     rgbPtr = static_cast<uint8_t *>(calloc(rgbsize, sizeof(uint8_t)));
@@ -429,6 +415,11 @@ void MajorImageProcessingThread::run()
                     }
                     if (saveImg)
                         delete saveImg;
+
+                    if (rgbPtr != nullptr) {
+                        free(rgbPtr);
+                        rgbPtr = nullptr;
+                    }
                 }
 
                 if (nRet < 0) {
@@ -475,6 +466,8 @@ void MajorImageProcessingThread::run()
     #ifdef UNITTEST
             break;
     #endif
+            //保证画面流畅的前提下降低刷新率
+            msleep(33);
         }
 
         v4l2core_stop_stream(m_videoDevice);

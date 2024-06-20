@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2023 UnionTech Software Technology Co., Ltd.
+//
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 #ifndef TITLEBAR_H
 #define TITLEBAR_H
 
@@ -27,7 +31,7 @@ public:
      */
     DTitlebar *titlebar();
 
-private slots:
+public slots:
     /**
      * @brief slotThemeTypeChanged 主题变化事件槽函数
      */

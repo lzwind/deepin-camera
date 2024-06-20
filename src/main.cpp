@@ -1,23 +1,7 @@
-/*
-* Copyright (C) 2020 ~ 2021 Uniontech Software Technology Co.,Ltd.
-*
-* Author:     shicetu <shicetu@uniontech.com>
-*             hujianbo <hujianbo@uniontech.com>
-* Maintainer: shicetu <shicetu@uniontech.com>
-*             hujianbo <hujianbo@uniontech.com>
-* This program is free software: you can redistribute it and/or modify
-* it under the terms of the GNU General Public License as published by
-* the Free Software Foundation, either version 3 of the License, or
-* any later version.
-*
-* This program is distributed in the hope that it will be useful,
-* but WITHOUT ANY WARRANTY; without even the implied warranty of
-* MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-* GNU General Public License for more details.
-*
-* You should have received a copy of the GNU General Public License
-* along with this program.  If not, see <http://www.gnu.org/licenses/>.
-*/
+// Copyright (C) 2020 ~ 2021 Uniontech Software Technology Co.,Ltd.
+// SPDX-FileCopyrightText: 2023 UnionTech Software Technology Co., Ltd.
+//
+// SPDX-License-Identifier: GPL-3.0-or-later
 
 extern "C"
 {
@@ -27,6 +11,7 @@ extern "C"
 #include "capplication.h"
 #include "cameraconfig.h"
 #include "acobjectlist.h"
+#include "dbus_adpator.h"
 
 extern "C"
 {
@@ -54,31 +39,6 @@ extern "C"
 DWIDGET_USE_NAMESPACE
 
 
-
-static bool runSingleInstance()
-{
-    QString userName = QDir::homePath().section("/", -1, -1);
-    std::string path = ("/home/" + userName + "/.cache/deepin/deepin-camera/").toStdString();
-    QDir tdir(path.c_str());
-    if (!tdir.exists()) {
-        tdir.mkpath(path.c_str());
-    }
-
-    path += "single";
-    int fd = open(path.c_str(), O_WRONLY | O_CREAT, 0644);
-    int flock = lockf(fd, F_TLOCK, 0);
-
-    if (fd == -1) {
-        qInfo() << strerror(errno);
-        return false;
-    }
-    if (flock == -1) {
-        qInfo() << strerror(errno);
-        return false;
-    }
-    return true;
-}
-
 //判断是否采用wayland显示服务器
 static bool CheckWayland()
 {
@@ -98,7 +58,35 @@ static bool CheckFFmpegEnv()
     QString path  = QLibraryInfo::location(QLibraryInfo::LibrariesPath);
     dir.setPath(path);
     QStringList list = dir.entryList(QStringList() << (QString("libavcodec") + "*"), QDir::NoDotAndDotDot | QDir::Files);
-    if (list.contains("libavcodec.so.58")) {
+    QString libName = nullptr;
+    QRegExp re("libavcodec.so.*"); //Sometimes libavcodec.so may not exist, so find it through regular expression.
+    for (int i = 0; i < list.count(); i++) {
+        if (re.exactMatch(list[i])) {
+            libName = list[i];
+            break;
+        }
+    }
+
+    if (libName != nullptr) {
+        QLibrary libavcodec;  //检查编码器是否存在
+        libavcodec.setFileName(libName);
+        qDebug() << "Whether the libavcodec is loaded successfully: "<< libavcodec.load();
+        typedef AVCodec *(*p_avcodec_find_encoder)(enum AVCodecID id);
+        p_avcodec_find_encoder m_avcodec_find_encoder = nullptr;
+        m_avcodec_find_encoder = reinterpret_cast<p_avcodec_find_encoder>(libavcodec.resolve("avcodec_find_encoder"));
+
+        AVCodec *pCodec = nullptr;
+        if (m_avcodec_find_encoder)
+            pCodec = m_avcodec_find_encoder(AV_CODEC_ID_H264);
+
+        if (pCodec) {
+            qDebug() << "Video encoder exists. AVCodecID:" << AV_CODEC_ID_H264;
+            DataManager::instance()->setEncExists(true);
+        } else {
+            qWarning() << "Can not find output video encoder! AVCodecID:" << AV_CODEC_ID_H264;
+            DataManager::instance()->setEncExists(false);
+        }
+
         return true;
     }
     return false;
@@ -106,6 +94,9 @@ static bool CheckFFmpegEnv()
 
 int main(int argc, char *argv[])
 {
+    // Task 326583 不参与合成器崩溃重连
+    unsetenv("QT_WAYLAND_RECONNECT");
+
     QAccessible::installFactory(accessibleFactory);
     bool bWayland = CheckWayland();
     bool bFFmpegEnv = CheckFFmpegEnv();
@@ -122,14 +113,14 @@ int main(int argc, char *argv[])
         setenv("XDG_CURRENT_DESKTOP", "Deepin", 1);
     }
 
-    if (bWayland) {
+   if (bWayland) {
         //默认走xdgv6,该库没有维护了，因此需要添加该代码
         qputenv("QT_WAYLAND_SHELL_INTEGRATION", "kwayland-shell");
         QSurfaceFormat format;
         format.setRenderableType(QSurfaceFormat::OpenGLES);
         format.setDefaultFormat(format);
         set_wayland_status(1);
-    }
+   }
 
     QTime time;
     time.start();
@@ -174,7 +165,7 @@ int main(int argc, char *argv[])
 
     DApplicationSettings saveTheme;
 
-    if (!runSingleInstance()) {
+    if (!qApp->setSingleInstance("deepin-camera")) {
         qDebug() << "another deepin camera instance has started";
         QDBusInterface iface("com.deepin.camera", QDir::separator(), "com.deepin.camera");
         if (iface.isValid()) {
@@ -198,6 +189,10 @@ int main(int argc, char *argv[])
 
     w.show();
     w.loadAfterShow();
+
+    ApplicationAdaptor adaptor(&w);
+    QDBusConnection::sessionBus().registerService("com.deepin.camera");
+    QDBusConnection::sessionBus().registerObject(QDir::separator(), &w);
 
     return qApp->exec();
 }

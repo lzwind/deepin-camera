@@ -1,29 +1,14 @@
-/*
-* Copyright (C) 2020 ~ 2021 Uniontech Software Technology Co.,Ltd.
-*
-* Author:     fengli <fengli@uniontech.com>
-*
-* Maintainer: fengli <fengli@uniontech.com>
-*
-* This program is free software: you can redistribute it and/or modify
-* it under the terms of the GNU General Public License as published by
-* the Free Software Foundation, either version 3 of the License, or
-* any later version.
-*
-* This program is distributed in the hope that it will be useful,
-* but WITHOUT ANY WARRANTY; without even the implied warranty of
-* MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-* GNU General Public License for more details.
-*
-* You should have received a copy of the GNU General Public License
-* along with this program.  If not, see <http://www.gnu.org/licenses/>.
-*/
+// Copyright (C) 2020 ~ 2021 Uniontech Software Technology Co.,Ltd.
+// SPDX-FileCopyrightText: 2023 UnionTech Software Technology Co., Ltd.
+//
+// SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "rollingbox.h"
 
 #include <QMouseEvent>
 #include <QPainter>
 #include <QTimer>
+#include <QGraphicsDropShadowEffect>
 
 #include <DApplicationHelper>
 
@@ -51,6 +36,12 @@ RollingBox::RollingBox(QWidget *parent) :
     m_homingAnimation = new QPropertyAnimation(this, "deviation", this);
     m_homingAnimation->setDuration(300);
     m_homingAnimation->setEasingCurve(QEasingCurve::OutQuad);
+
+    QGraphicsDropShadowEffect *shadowEffect = new QGraphicsDropShadowEffect(this);
+    shadowEffect->setOffset(0, 0);
+    shadowEffect->setColor(QColor(33, 33, 33, 125));
+    shadowEffect->setBlurRadius(8);
+    this->setGraphicsEffect(shadowEffect);
 }
 
 void RollingBox::setRange(int min, int max)
@@ -207,6 +198,9 @@ void RollingBox::paintEvent(QPaintEvent *e)
     QRect tmpLeftRect(centerRect.topLeft(), QSize(BTN_HEIGHT, BTN_HEIGHT));
     QRect tmpRightRect(centerRect.topRight() - QPoint(BTN_HEIGHT, 0), QSize(BTN_HEIGHT, BTN_HEIGHT));
     QPainterPath centerPath;
+
+//    painter.setPen(QColor(255, 0, 0));
+//    painter.drawRect(this->rect());
 
     centerPath.moveTo(tmpLeftRect.topRight());
     centerPath.arcTo(tmpLeftRect, 90, 180);
